@@ -22,10 +22,10 @@ app.use(cors());
 app.use(json());
 
 const PROVIDERS = [
-  "https://vidsrc.xyz",
-  "https://vidsrc.in",
-  "https://vidsrc.pm",
-  "https://vidsrc.net",
+  "https://vidsrc-embed.ru",
+  "https://vidsrc-embed.su",
+  "https://vidsrcme.su",
+  "https://vsrc.su",
 ];
 
 export const LANGUAGE_NAMES = {
@@ -97,8 +97,11 @@ async function scrapeProvider(domain, url) {
       console.log(`[${domain}] Frame attached: ${frame.url()}`);
     });
 
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
     console.log(`[${domain}] Page loaded`);
+
+    // Wait for the page to settle
+    await page.waitForTimeout(3000);
 
     const frameDiv = await page.waitForSelector("#the_frame", {
       timeout: 10000,
@@ -123,27 +126,39 @@ async function scrapeProvider(domain, url) {
         });
       }
 
-      // Give time for network requests (especially subtitle .vtt)
-      await page.waitForTimeout(7000);
+      // Give more time for network requests
+      await page.waitForTimeout(10000);
 
       // Try waiting for the HLS URL (if not already found)
       if (!hlsUrl) {
         await page
           .waitForResponse((resp) => resp.url().includes(".m3u8"), {
-            timeout: 5000,
+            timeout: 10000,
           })
           .catch(() => {
-            console.warn(`[${domain}] .m3u8 request not detected within 5s`);
+            console.warn(`[${domain}] .m3u8 request not detected within 10s`);
           });
       }
 
-      // Extra wait if subtitles not found yet
-      if (subtitles.length === 0) {
-        console.warn(`[${domain}] No subtitles yet, waiting extra 5s...`);
-        await page.waitForTimeout(5000);
+      // Extra wait if nothing found yet
+      if (subtitles.length === 0 && !hlsUrl) {
+        console.warn(`[${domain}] Nothing yet, waiting extra 10s...`);
+        await page.waitForTimeout(10000);
       }
     } else {
-      throw new Error(`#the_frame div not found`);
+      console.warn(`[${domain}] #the_frame not found, waiting for HLS URL directly`);
+      await page.waitForTimeout(10000);
+    }
+
+    // Try waiting for the HLS URL one more time
+    if (!hlsUrl) {
+      await page
+        .waitForResponse((resp) => resp.url().includes(".m3u8"), {
+          timeout: 15000,
+        })
+        .catch(() => {
+          console.warn(`[${domain}] Final HLS wait timed out`);
+        });
     }
 
     await page.close();
